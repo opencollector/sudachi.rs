@@ -31,6 +31,7 @@ use sudachi::dic::dictionary::JapaneseDictionary;
 use sudachi::dic::grammar::Grammar;
 use sudachi::dic::lexicon_set::LexiconSet;
 use sudachi::dic::subset::InfoSubset;
+use sudachi::plugin::PluginContainers;
 use sudachi::plugin::input_text::InputTextPlugin;
 use sudachi::plugin::oov::OovProviderPlugin;
 use sudachi::plugin::path_rewrite::PathRewritePlugin;
@@ -60,15 +61,15 @@ impl DictionaryAccess for PyDicData {
         self.dictionary.lexicon()
     }
 
-    fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>] {
+    fn input_text_plugins(&self) -> impl IntoIterator<Item = &Box<dyn InputTextPlugin + Sync + Send>> + Clone {
         self.dictionary.input_text_plugins()
     }
 
-    fn oov_provider_plugins(&self) -> &[Box<dyn OovProviderPlugin + Sync + Send>] {
+    fn oov_provider_plugins(&self) -> impl IntoIterator<Item = &Box<dyn OovProviderPlugin + Sync + Send>> + Clone {
         self.dictionary.oov_provider_plugins()
     }
 
-    fn path_rewrite_plugins(&self) -> &[Box<dyn PathRewritePlugin + Sync + Send>] {
+    fn path_rewrite_plugins(&self) -> impl IntoIterator<Item = &Box<dyn PathRewritePlugin + Sync + Send>> + Clone {
         self.dictionary.path_rewrite_plugins()
     }
 }
@@ -175,7 +176,7 @@ impl PyDictionary {
             None => config_builder,
         };
 
-        let mut config = config_builder.build();
+        let mut config = config_builder.build(|cfg, grammar| Ok(Box::new(PluginContainers::load(cfg, grammar)?)));
 
         // Load a dictionary from `sudachidict_core` as the default one.
         // For this behavior, the value of `systemDict` key in the default setting file must be

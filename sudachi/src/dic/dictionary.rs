@@ -42,7 +42,7 @@ use crate::plugin::Plugins;
 // between threads.
 pub struct JapaneseDictionary {
     storage: SudachiDicData,
-    plugins: Plugins,
+    plugins: Box<dyn Plugins + Send + Sync>,
     //'static is a a lie, lifetime is the same with StorageBackend
     _grammar: Grammar<'static>,
     //'static is a a lie, lifetime is the same with StorageBackend
@@ -85,16 +85,13 @@ impl JapaneseDictionary {
             cfg.complete_path(&cfg.character_definition_file)?.as_path(),
         )?;
 
-        let plugins = {
-            let grammar = &mut basic_dict.grammar;
-            Plugins::load(cfg, grammar)?
-        };
+        let plugins = cfg.load_plugins(&mut basic_dict.grammar)?;
 
-        if plugins.oov.is_empty() {
+        if plugins.oov().is_empty() {
             return Err(SudachiError::NoOOVPluginProvided);
         }
 
-        for p in plugins.connect_cost.plugins() {
+        for p in plugins.connect_cost() {
             p.edit(&mut basic_dict.grammar);
         }
 
@@ -123,16 +120,13 @@ impl JapaneseDictionary {
             storage.system_static_slice()
         })?;
 
-        let plugins = {
-            let grammar = &mut basic_dict.grammar;
-            Plugins::load(cfg, grammar)?
-        };
+        let plugins = cfg.load_plugins(&mut basic_dict.grammar)?;
 
-        if plugins.oov.is_empty() {
+        if plugins.oov().is_empty() {
             return Err(SudachiError::NoOOVPluginProvided);
         }
 
-        for p in plugins.connect_cost.plugins() {
+        for p in plugins.connect_cost() {
             p.edit(&mut basic_dict.grammar);
         }
 
@@ -189,15 +183,21 @@ impl DictionaryAccess for JapaneseDictionary {
         self.lexicon()
     }
 
-    fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>] {
-        self.plugins.input_text.plugins()
+    fn input_text_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn InputTextPlugin + Send + Sync>> + Clone {
+        self.plugins.input_text()
     }
 
-    fn oov_provider_plugins(&self) -> &[Box<dyn OovProviderPlugin + Sync + Send>] {
-        self.plugins.oov.plugins()
+    fn oov_provider_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn OovProviderPlugin + Send + Sync>> + Clone {
+        self.plugins.oov()
     }
 
-    fn path_rewrite_plugins(&self) -> &[Box<dyn PathRewritePlugin + Sync + Send>] {
-        self.plugins.path_rewrite.plugins()
+    fn path_rewrite_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn PathRewritePlugin + Send + Sync>> + Clone {
+        self.plugins.path_rewrite()
     }
 }

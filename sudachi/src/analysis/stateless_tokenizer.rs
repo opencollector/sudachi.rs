@@ -34,9 +34,15 @@ use super::{Mode, Tokenize};
 pub trait DictionaryAccess {
     fn grammar(&self) -> &Grammar<'_>;
     fn lexicon(&self) -> &LexiconSet<'_>;
-    fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>];
-    fn oov_provider_plugins(&self) -> &[Box<dyn OovProviderPlugin + Sync + Send>];
-    fn path_rewrite_plugins(&self) -> &[Box<dyn PathRewritePlugin + Sync + Send>];
+    fn input_text_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn InputTextPlugin + Sync + Send>> + Clone;
+    fn oov_provider_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn OovProviderPlugin + Sync + Send>> + Clone;
+    fn path_rewrite_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn PathRewritePlugin + Sync + Send>> + Clone;
 }
 
 impl<T> DictionaryAccess for T
@@ -52,15 +58,21 @@ where
         <T as Deref>::deref(self).lexicon()
     }
 
-    fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>] {
+    fn input_text_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn InputTextPlugin + Sync + Send>> + Clone {
         <T as Deref>::deref(self).input_text_plugins()
     }
 
-    fn oov_provider_plugins(&self) -> &[Box<dyn OovProviderPlugin + Sync + Send>] {
+    fn oov_provider_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn OovProviderPlugin + Sync + Send>> + Clone {
         <T as Deref>::deref(self).oov_provider_plugins()
     }
 
-    fn path_rewrite_plugins(&self) -> &[Box<dyn PathRewritePlugin + Sync + Send>] {
+    fn path_rewrite_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn PathRewritePlugin + Sync + Send>> + Clone {
         <T as Deref>::deref(self).path_rewrite_plugins()
     }
 }

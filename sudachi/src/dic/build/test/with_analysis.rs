@@ -21,6 +21,7 @@ use crate::config::Config;
 use crate::dic::build::DictBuilder;
 use crate::dic::dictionary::JapaneseDictionary;
 use crate::dic::subset::InfoSubset;
+use crate::plugin::PluginContainers;
 use crate::prelude::MorphemeList;
 use std::fmt::{Debug, Write as FmtWrite};
 use std::fs::File;

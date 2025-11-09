@@ -19,14 +19,13 @@ use thiserror::Error;
 
 use crate::config::Config;
 use crate::dic::grammar::Grammar;
+use crate::error::SudachiResult;
 use crate::plugin::connect_cost::EditConnectionCostPlugin;
 use crate::plugin::input_text::InputTextPlugin;
-use crate::plugin::loader::{load_plugins_of, PluginContainer};
 use crate::plugin::oov::OovProviderPlugin;
 use crate::plugin::path_rewrite::PathRewritePlugin;
-use crate::prelude::*;
 
-pub use self::loader::PluginCategory;
+pub use self::registry::{FrozenPluginContainer, PluginCategory, PluginContainer, PluginRegistry};
 
 pub mod connect_cost;
 pub mod dso;
@@ -34,11 +33,18 @@ pub mod input_text;
 mod loader;
 pub mod oov;
 pub mod path_rewrite;
+pub mod registry;
 
 #[derive(Error, Debug)]
 pub enum PluginError {
     #[error("IO Error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("Plugin {name} not found: {candidates:?}")]
+    NotFound {
+        name: String,
+        candidates: Vec<String>,
+    },
 
     #[error("Libloading Error: {message} ; {source}")]
     Libloading { source: LLError, message: String },
@@ -59,29 +65,123 @@ impl From<LLError> for PluginError {
     }
 }
 
-pub(crate) struct Plugins {
-    pub(crate) connect_cost: PluginContainer<dyn EditConnectionCostPlugin>,
-    pub(crate) input_text: PluginContainer<dyn InputTextPlugin>,
-    pub(crate) oov: PluginContainer<dyn OovProviderPlugin>,
-    pub(crate) path_rewrite: PluginContainer<dyn PathRewritePlugin>,
+pub trait Plugins {
+    fn connect_cost(&self) -> &dyn PluginContainer<dyn EditConnectionCostPlugin>;
+    fn input_text(&self) -> &dyn PluginContainer<dyn InputTextPlugin>;
+    fn oov(&self) -> &dyn PluginContainer<dyn OovProviderPlugin>;
+    fn path_rewrite(&self) -> &dyn PluginContainer<dyn PathRewritePlugin>;
 }
 
-impl Plugins {
-    pub(crate) fn load<'a, 'b>(
+pub struct PluginContainers {
+    connect_cost: FrozenPluginContainer<dyn EditConnectionCostPlugin>,
+    input_text: FrozenPluginContainer<dyn InputTextPlugin>,
+    oov: FrozenPluginContainer<dyn OovProviderPlugin>,
+    path_rewrite: FrozenPluginContainer<dyn PathRewritePlugin>,
+}
+
+impl PluginContainers {
+    /// Helper function to load the plugins of a single category
+    /// Should be called with turbofish syntax and trait object type:
+    /// `let plugins = load_plugins_of::<dyn InputText>(...)`.
+    fn load_plugins_of<'a, 'b, T: PluginCategory + ?Sized>(
         cfg: &'a Config,
         grammar: &'a mut Grammar<'b>,
-    ) -> SudachiResult<Plugins>
+    ) -> SudachiResult<FrozenPluginContainer<T>> {
+        let mut registry = PluginRegistry::new(cfg);
+        registry.load_all(grammar)?;
+        Ok(registry.into())
+    }
+
+    pub fn load<'a, 'b>(cfg: &'a Config, grammar: &'a mut Grammar<'b>) -> SudachiResult<Self>
     where
         'b: 'a,
     {
-        let plugins = Plugins {
-            connect_cost: load_plugins_of(cfg, grammar)
+        Ok(Self {
+            connect_cost: Self::load_plugins_of(cfg, grammar)
                 .map_err(|e| e.with_context("connect_cost"))?,
-            input_text: load_plugins_of(cfg, grammar).map_err(|e| e.with_context("input_text"))?,
-            oov: load_plugins_of(cfg, grammar).map_err(|e| e.with_context("oov"))?,
-            path_rewrite: load_plugins_of(cfg, grammar)
+            input_text: Self::load_plugins_of(cfg, grammar)
+                .map_err(|e| e.with_context("input_text"))?,
+            oov: Self::load_plugins_of(cfg, grammar).map_err(|e| e.with_context("oov"))?,
+            path_rewrite: Self::load_plugins_of(cfg, grammar)
                 .map_err(|e| e.with_context("path_rewrite"))?,
-        };
-        Ok(plugins)
+        })
+    }
+}
+
+impl Plugins for PluginContainers {
+    fn connect_cost(&self) -> &dyn PluginContainer<dyn EditConnectionCostPlugin> {
+        &self.connect_cost
+    }
+
+    fn input_text(&self) -> &dyn PluginContainer<dyn InputTextPlugin> {
+        &self.input_text
+    }
+
+    fn oov(&self) -> &dyn PluginContainer<dyn OovProviderPlugin> {
+        &self.oov
+    }
+
+    fn path_rewrite(&self) -> &dyn PluginContainer<dyn PathRewritePlugin> {
+        &self.path_rewrite
+    }
+}
+
+pub struct PluginRegistries<'a> {
+    connect_cost: PluginRegistry<'a, dyn EditConnectionCostPlugin>,
+    input_text: PluginRegistry<'a, dyn InputTextPlugin>,
+    oov: PluginRegistry<'a, dyn OovProviderPlugin>,
+    path_rewrite: PluginRegistry<'a, dyn PathRewritePlugin>,
+}
+
+impl<'a> PluginRegistries<'a> {
+    pub fn new(cfg: &'a Config) -> Self {
+        Self {
+            connect_cost: PluginRegistry::new(cfg),
+            input_text: PluginRegistry::new(cfg),
+            oov: PluginRegistry::new(cfg),
+            path_rewrite: PluginRegistry::new(cfg),
+        }
+    }
+
+    fn connect_cost_mut(&mut self) -> &mut PluginRegistry<'a, dyn EditConnectionCostPlugin> {
+        &mut self.connect_cost
+    }
+
+    fn input_text_mut(&mut self) -> &mut PluginRegistry<'a, dyn InputTextPlugin> {
+        &mut self.input_text
+    }
+
+    fn oov_mut(&mut self) -> &mut PluginRegistry<'a, dyn OovProviderPlugin> {
+        &mut self.oov
+    }
+
+    fn path_rewrite_mut(&mut self) -> &mut PluginRegistry<'a, dyn PathRewritePlugin> {
+        &mut self.path_rewrite
+    }
+
+    fn load<'b>(&mut self, grammar: &'a mut Grammar<'b>) -> SudachiResult<()> {
+        self.connect_cost.load_all(grammar)?;
+        self.input_text.load_all(grammar)?;
+        self.oov.load_all(grammar)?;
+        self.path_rewrite.load_all(grammar)?;
+        Ok(())
+    }
+}
+
+impl<'a> Plugins for PluginRegistries<'a> {
+    fn connect_cost(&self) -> &dyn PluginContainer<dyn EditConnectionCostPlugin> {
+        &self.connect_cost
+    }
+
+    fn input_text(&self) -> &dyn PluginContainer<dyn InputTextPlugin> {
+        &self.input_text
+    }
+
+    fn oov(&self) -> &dyn PluginContainer<dyn OovProviderPlugin> {
+        &self.oov
+    }
+
+    fn path_rewrite(&self) -> &dyn PluginContainer<dyn PathRewritePlugin> {
+        &self.path_rewrite
     }
 }

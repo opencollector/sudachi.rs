@@ -113,16 +113,22 @@ impl<'a> DictionaryAccess for LoadedDictionary<'a> {
         &self.lexicon_set
     }
 
-    fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>] {
-        &[]
+    fn input_text_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn InputTextPlugin + Sync + Send>> + Clone {
+        std::iter::empty()
     }
 
-    fn oov_provider_plugins(&self) -> &[Box<dyn OovProviderPlugin + Sync + Send>] {
-        &[]
+    fn oov_provider_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn OovProviderPlugin + Sync + Send>> + Clone {
+        std::iter::empty()
     }
 
-    fn path_rewrite_plugins(&self) -> &[Box<dyn PathRewritePlugin + Sync + Send>] {
-        &[]
+    fn path_rewrite_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn PathRewritePlugin + Sync + Send>> + Clone {
+        std::iter::empty()
     }
 }
 
