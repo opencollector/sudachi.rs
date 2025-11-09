@@ -21,6 +21,7 @@ use crate::config::Config;
 use crate::dic::build::DictBuilder;
 use crate::dic::dictionary::JapaneseDictionary;
 use crate::dic::subset::InfoSubset;
+use crate::plugin::PluginContainers;
 use crate::prelude::MorphemeList;
 use std::fmt::{Debug, Write as FmtWrite};
 use std::fs::File;
@@ -117,7 +118,7 @@ fn system_only_1() {
     dic.compile(&mut cfgb.make_system()).unwrap();
 
     let cfg = cfgb.config();
-    let jd = JapaneseDictionary::from_cfg(&cfg).unwrap();
+    let jd = JapaneseDictionary::from_cfg(&cfg, |cfg, grammar| Ok(Box::new(PluginContainers::load(cfg, grammar)?))).unwrap();
     let tok = StatelessTokenizer::new(&jd);
     let result = tok.tokenize("東京にいく", Mode::C, false).unwrap();
     assert_eq!(result.len(), 3);
@@ -132,12 +133,12 @@ fn system_plus_user_1() {
     dic.resolve().unwrap();
     dic.compile(&mut cfgb.make_system()).unwrap();
 
-    let jd = JapaneseDictionary::from_cfg(&cfgb.config()).unwrap();
+    let jd = JapaneseDictionary::from_cfg(&cfgb.config(), |cfg, grammar| Ok(Box::new(PluginContainers::load(cfg, grammar)?))).unwrap();
     let mut dic2 = DictBuilder::new_user(&jd);
     dic2.read_lexicon(USER1_LEX).unwrap();
     dic2.resolve().unwrap();
     dic2.compile(&mut cfgb.add_user()).unwrap();
-    let jd2 = JapaneseDictionary::from_cfg(&cfgb.config()).unwrap();
+    let jd2 = JapaneseDictionary::from_cfg(&cfgb.config(), |cfg, grammar| Ok(Box::new(PluginContainers::load(cfg, grammar)?))).unwrap();
     let tok = StatelessTokenizer::new(&jd2);
     let result = tok.tokenize("すだちにいく", Mode::C, false).unwrap();
     assert_eq!(result.len(), 3);
@@ -153,7 +154,7 @@ fn system_plus_user_2() {
     dic.resolve().unwrap();
     dic.compile(&mut cfgb.make_system()).unwrap();
 
-    let jd = JapaneseDictionary::from_cfg(&cfgb.config()).unwrap();
+    let jd = JapaneseDictionary::from_cfg(&cfgb.config(), |cfg, grammar| Ok(Box::new(PluginContainers::load(cfg, grammar)?))).unwrap();
     let mut dic2 = DictBuilder::new_user(&jd);
     dic2.read_lexicon(USER1_LEX).unwrap();
     dic2.resolve().unwrap();
@@ -162,7 +163,7 @@ fn system_plus_user_2() {
     dic2.read_lexicon(USER2_LEX).unwrap();
     dic2.resolve().unwrap();
     dic2.compile(&mut cfgb.add_user()).unwrap();
-    let jd2 = JapaneseDictionary::from_cfg(&cfgb.config()).unwrap();
+    let jd2 = JapaneseDictionary::from_cfg(&cfgb.config(), |cfg, grammar| Ok(Box::new(PluginContainers::load(cfg, grammar)?))).unwrap();
     let tok = StatelessTokenizer::new(&jd2);
     let result = tok.tokenize("かぼすにいく", Mode::C, false).unwrap();
     assert_eq!(result.len(), 3);
@@ -179,7 +180,7 @@ fn split_with_subset() {
     dic.resolve().unwrap();
     dic.compile(&mut cfgb.make_system()).unwrap();
 
-    let jd = JapaneseDictionary::from_cfg(&cfgb.config()).unwrap();
+    let jd = JapaneseDictionary::from_cfg(&cfgb.config(), |cfg, grammar| Ok(Box::new(PluginContainers::load(cfg, grammar)?))).unwrap();
     let mut tok = StatefulTokenizer::new(&jd, Mode::A);
     let mut res = MorphemeList::empty(&jd);
     tok.set_subset(InfoSubset::empty());

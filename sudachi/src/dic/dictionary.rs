@@ -42,7 +42,7 @@ use crate::plugin::Plugins;
 // between threads.
 pub struct JapaneseDictionary {
     storage: SudachiDicData,
-    plugins: Plugins,
+    plugins: Box<dyn Plugins + Send + Sync>,
     //'static is a a lie, lifetime is the same with StorageBackend
     _grammar: Grammar<'static>,
     //'static is a a lie, lifetime is the same with StorageBackend
@@ -63,7 +63,15 @@ fn load_system_dic(cfg: &Config) -> SudachiResult<Storage> {
 impl JapaneseDictionary {
     /// Creates a dictionary from the specified configuration
     /// Dictionaries will be read from disk
-    pub fn from_cfg(cfg: &Config) -> SudachiResult<JapaneseDictionary> {
+    pub fn from_cfg(
+        cfg: &Config,
+        plugins_loader: impl for<'a, 'b> Fn(
+                &'a Config,
+                &'a mut Grammar<'b>,
+            ) -> SudachiResult<Box<dyn Plugins + Send + Sync>>
+            + Send
+            + Sync,
+    ) -> SudachiResult<JapaneseDictionary> {
         let mut sb = SudachiDicData::new(load_system_dic(cfg)?);
 
         for udic in cfg.resolved_user_dicts()? {
@@ -72,29 +80,32 @@ impl JapaneseDictionary {
             )
         }
 
-        Self::from_cfg_storage(cfg, sb)
+        Self::from_cfg_storage(cfg, sb, plugins_loader)
     }
 
     /// Creates a dictionary from the specified configuration and storage
     pub fn from_cfg_storage(
         cfg: &Config,
         storage: SudachiDicData,
+        plugins_loader: impl for<'a, 'b> Fn(
+                &'a Config,
+                &'a mut Grammar<'b>,
+            ) -> SudachiResult<Box<dyn Plugins + Send + Sync>>
+            + Send
+            + Sync,
     ) -> SudachiResult<JapaneseDictionary> {
         let mut basic_dict = LoadedDictionary::from_system_dictionary(
             unsafe { storage.system_static_slice() },
             cfg.complete_path(&cfg.character_definition_file)?.as_path(),
         )?;
 
-        let plugins = {
-            let grammar = &mut basic_dict.grammar;
-            Plugins::load(cfg, grammar)?
-        };
+        let plugins = plugins_loader(cfg, &mut basic_dict.grammar)?;
 
-        if plugins.oov.is_empty() {
+        if plugins.oov().is_empty() {
             return Err(SudachiError::NoOOVPluginProvided);
         }
 
-        for p in plugins.connect_cost.plugins() {
+        for p in plugins.connect_cost() {
             p.edit(&mut basic_dict.grammar);
         }
 
@@ -118,21 +129,24 @@ impl JapaneseDictionary {
     pub fn from_cfg_storage_with_embedded_chardef(
         cfg: &Config,
         storage: SudachiDicData,
+        plugins_loader: impl for<'a, 'b> Fn(
+                &'a Config,
+                &'a mut Grammar<'b>,
+            ) -> SudachiResult<Box<dyn Plugins + Send + Sync>>
+            + Send
+            + Sync,
     ) -> SudachiResult<JapaneseDictionary> {
         let mut basic_dict = LoadedDictionary::from_system_dictionary_embedded(unsafe {
             storage.system_static_slice()
         })?;
 
-        let plugins = {
-            let grammar = &mut basic_dict.grammar;
-            Plugins::load(cfg, grammar)?
-        };
+        let plugins = plugins_loader(cfg, &mut basic_dict.grammar)?;
 
-        if plugins.oov.is_empty() {
+        if plugins.oov().is_empty() {
             return Err(SudachiError::NoOOVPluginProvided);
         }
 
-        for p in plugins.connect_cost.plugins() {
+        for p in plugins.connect_cost() {
             p.edit(&mut basic_dict.grammar);
         }
 
@@ -189,15 +203,21 @@ impl DictionaryAccess for JapaneseDictionary {
         self.lexicon()
     }
 
-    fn input_text_plugins(&self) -> &[Box<dyn InputTextPlugin + Sync + Send>] {
-        self.plugins.input_text.plugins()
+    fn input_text_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn InputTextPlugin + Send + Sync>> + Clone {
+        self.plugins.input_text()
     }
 
-    fn oov_provider_plugins(&self) -> &[Box<dyn OovProviderPlugin + Sync + Send>] {
-        self.plugins.oov.plugins()
+    fn oov_provider_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn OovProviderPlugin + Send + Sync>> + Clone {
+        self.plugins.oov()
     }
 
-    fn path_rewrite_plugins(&self) -> &[Box<dyn PathRewritePlugin + Sync + Send>] {
-        self.plugins.path_rewrite.plugins()
+    fn path_rewrite_plugins(
+        &self,
+    ) -> impl IntoIterator<Item = &Box<dyn PathRewritePlugin + Send + Sync>> + Clone {
+        self.plugins.path_rewrite()
     }
 }

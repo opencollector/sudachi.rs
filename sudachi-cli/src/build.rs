@@ -33,6 +33,7 @@ use sudachi::dic::lexicon_set::LexiconSet;
 use sudachi::dic::word_id::WordId;
 use sudachi::dic::DictionaryLoader;
 use sudachi::error::SudachiResult;
+use sudachi::plugin::PluginContainers;
 
 /// Check that the first argument is a subcommand and the file with the same name does
 /// not exists.
@@ -144,7 +145,10 @@ fn build_system(mut cmd: BuildCmd, matrix: PathBuf) {
 fn build_user(mut cmd: BuildCmd, system: PathBuf) {
     let cfg =
         Config::new(None, None, Some(system)).expect("failed to create default configuration");
-    let dict = JapaneseDictionary::from_cfg(&cfg).expect("failed to load system dictionary");
+    let dict = JapaneseDictionary::from_cfg(
+        &cfg,
+        |cfg, grammar| Ok(Box::new(PluginContainers::load(cfg, grammar)?))
+    ).expect("failed to load system dictionary");
 
     let mut builder = DictBuilder::new_user(&dict);
     builder.set_description(std::mem::take(&mut cmd.description));

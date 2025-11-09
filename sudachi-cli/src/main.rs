@@ -29,6 +29,7 @@ use crate::analysis::{Analysis, AnalyzeNonSplitted, AnalyzeSplitted, SplitSenten
 use crate::build::{build_main, is_build_mode, BuildCli};
 use sudachi::config::Config;
 use sudachi::dic::dictionary::JapaneseDictionary;
+use sudachi::plugin::PluginContainers;
 use sudachi::prelude::*;
 
 #[cfg(feature = "bake_dictionary")]
@@ -166,8 +167,10 @@ fn main() {
     )
     .expect("Failed to load config file");
 
-    let dict = JapaneseDictionary::from_cfg(&config)
-        .unwrap_or_else(|e| panic!("Failed to create dictionary: {:?}", e));
+    let dict = JapaneseDictionary::from_cfg(
+        &config,
+        |cfg, grammar| Ok(Box::new(PluginContainers::load(cfg, grammar)?))
+    ).unwrap_or_else(|e| panic!("Failed to create dictionary: {:?}", e));
 
     let mut analyzer: Box<dyn Analysis> = match args.split_sentences {
         SentenceSplitMode::Only => Box::new(SplitSentencesOnly::new(&dict)),

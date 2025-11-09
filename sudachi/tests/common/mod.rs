@@ -16,6 +16,7 @@
 
 extern crate sudachi;
 
+use lazy_static::lazy_static;
 use std::fs;
 use std::fs::File;
 use std::io::Read;
@@ -25,16 +26,18 @@ use std::sync::Arc;
 
 use sudachi::analysis::stateful_tokenizer::StatefulTokenizer;
 use sudachi::analysis::stateless_tokenizer::StatelessTokenizer;
-use sudachi::config::{Config, ConfigBuilder};
-use sudachi::dic::dictionary::JapaneseDictionary;
-use sudachi::dic::{grammar::Grammar, header::Header, lexicon::Lexicon, DictionaryLoader};
-use sudachi::prelude::*;
-
-use lazy_static::lazy_static;
 use sudachi::analysis::Tokenize;
+use sudachi::config::{Config, ConfigBuilder};
 use sudachi::dic::build::DictBuilder;
+use sudachi::dic::dictionary::JapaneseDictionary;
+use sudachi::dic::grammar::Grammar;
+use sudachi::dic::header::Header;
+use sudachi::dic::lexicon::Lexicon;
 use sudachi::dic::storage::{Storage, SudachiDicData};
 use sudachi::dic::subset::InfoSubset;
+use sudachi::dic::DictionaryLoader;
+use sudachi::plugin::PluginContainers;
+use sudachi::prelude::*;
 
 pub fn dictionary_bytes_from_path<P: AsRef<Path>>(dictionary_path: P) -> SudachiResult<Vec<u8>> {
     let dictionary_path = dictionary_path.as_ref();
@@ -94,7 +97,10 @@ pub struct TestTokenizer {
 #[allow(unused)]
 impl TestTokenizer {
     pub fn new() -> TestTokenizer {
-        let dict = JapaneseDictionary::from_cfg(&TEST_CONFIG).expect("failed to make dictionary");
+        let dict = JapaneseDictionary::from_cfg(&TEST_CONFIG, |cfg, grammar| {
+            Ok(Box::new(PluginContainers::load(cfg, grammar)?))
+        })
+        .expect("failed to make dictionary");
         let tok = StatelessTokenizer::new(Arc::new(dict));
         TestTokenizer { tok }
     }
@@ -180,7 +186,10 @@ impl<'a> TestTokenizerBuilder<'a> {
             Some(data) => ConfigBuilder::from_bytes(data).unwrap().build(),
         };
 
-        let dic = JapaneseDictionary::from_cfg_storage(&config, data).unwrap();
+        let dic = JapaneseDictionary::from_cfg_storage(&config, data, |cfg, grammar| {
+            Ok(Box::new(PluginContainers::load(cfg, grammar)?))
+        })
+        .unwrap();
         let rcdic = Rc::new(dic);
 
         TestStatefulTokenizer {
@@ -207,14 +216,19 @@ pub const USER2_CSV: &[u8] = include_bytes!("../resources/user2.csv");
 #[allow(unused)]
 impl TestStatefulTokenizer {
     pub fn new_built(mode: Mode) -> TestStatefulTokenizer {
-        let dic = Rc::new(JapaneseDictionary::from_cfg(&TEST_CONFIG).expect("works"));
+        let dic = Rc::new(
+            JapaneseDictionary::from_cfg(&TEST_CONFIG, |cfg, grammar| {
+                Ok(Box::new(PluginContainers::load(cfg, grammar)?))
+            })
+            .expect("works"),
+        );
         Self {
             tok: StatefulTokenizer::new(dic.clone(), mode),
             result: MorphemeList::empty(dic),
         }
     }
 
-    pub fn builder(system: &[u8]) -> TestTokenizerBuilder {
+    pub fn builder(system: &[u8]) -> TestTokenizerBuilder<'_> {
         TestTokenizerBuilder {
             system,
             user: Vec::new(),

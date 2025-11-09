@@ -16,16 +16,21 @@
 
 use std::convert::TryFrom;
 use std::env::current_exe;
+use std::fmt::Debug;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
+use crate::dic::grammar::Grammar;
 use crate::dic::subset::InfoSubset;
-use crate::error::SudachiError;
+use crate::error::{SudachiError, SudachiResult};
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
+
+use crate::plugin::{PluginContainers, Plugins};
 
 const DEFAULT_RESOURCE_DIR: &str = "resources";
 const DEFAULT_SETTING_FILE: &str = "sudachi.json";
@@ -146,7 +151,7 @@ impl TryFrom<&str> for SurfaceProjection {
 }
 
 /// Setting data loaded from config file
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Default)]
 pub struct Config {
     /// Paths will be resolved against these roots, until a file will be found
     resolver: PathResolver,
@@ -267,7 +272,9 @@ impl ConfigBuilder {
         self
     }
 
-    pub fn build(self) -> Config {
+    pub fn build(
+        self,
+    ) -> Config {
         let default_resource_dir = default_resource_dir();
         let resource_dir = self.resourcePath.unwrap_or(default_resource_dir);
 
@@ -369,7 +376,8 @@ impl Config {
         self
     }
 
-    pub fn resolve_paths(&self, mut path: String) -> Vec<String> {
+    pub fn resolve_paths(&self, path: &str) -> Vec<String> {
+        let mut path = path.to_owned();
         if path.starts_with("$exe") {
             path.replace_range(0..4, &CURRENT_EXE_DIR);
 
@@ -448,6 +456,21 @@ fn current_exe_dir() -> String {
     })
 }
 
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Config")
+            .field("system_dict", &self.system_dict)
+            .field("user_dicts", &self.user_dicts)
+            .field("character_definition_file", &self.character_definition_file)
+            .field("connection_cost_plugins", &self.connection_cost_plugins)
+            .field("input_text_plugins", &self.input_text_plugins)
+            .field("oov_provider_plugins", &self.oov_provider_plugins)
+            .field("path_rewrite_plugins", &self.path_rewrite_plugins)
+            .field("projection", &self.projection)
+            .finish()
+    }
+}
+
 lazy_static! {
     static ref CURRENT_EXE_DIR: String = current_exe_dir();
 }
@@ -462,7 +485,7 @@ mod tests {
     #[test]
     fn resolve_exe() -> SudachiResult<()> {
         let cfg = Config::new(None, None, None)?;
-        let npath = cfg.resolve_paths("$exe/data".to_owned());
+        let npath = cfg.resolve_paths("$exe/data");
         let exe_dir: &str = &CURRENT_EXE_DIR;
         assert_eq!(npath.len(), 2);
         assert!(npath[0].starts_with(exe_dir));
@@ -472,7 +495,7 @@ mod tests {
     #[test]
     fn resolve_cfg() -> SudachiResult<()> {
         let cfg = Config::new(None, None, None)?;
-        let npath = cfg.resolve_paths("$cfg/data".to_owned());
+        let npath = cfg.resolve_paths("$cfg/data");
         let def = default_resource_dir();
         let path_dir: &str = def.to_str().unwrap();
         assert_eq!(1, npath.len());
