@@ -22,19 +22,22 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
+use lazy_static::lazy_static;
 
+use sudachi::analysis::Tokenize;
 use sudachi::analysis::stateful_tokenizer::StatefulTokenizer;
 use sudachi::analysis::stateless_tokenizer::StatelessTokenizer;
 use sudachi::config::{Config, ConfigBuilder};
-use sudachi::dic::dictionary::JapaneseDictionary;
-use sudachi::dic::{grammar::Grammar, header::Header, lexicon::Lexicon, DictionaryLoader};
-use sudachi::prelude::*;
-
-use lazy_static::lazy_static;
-use sudachi::analysis::Tokenize;
+use sudachi::dic::DictionaryLoader;
 use sudachi::dic::build::DictBuilder;
+use sudachi::dic::dictionary::JapaneseDictionary;
+use sudachi::dic::grammar::Grammar;
+use sudachi::dic::header::Header;
+use sudachi::dic::lexicon::Lexicon;
 use sudachi::dic::storage::{Storage, SudachiDicData};
 use sudachi::dic::subset::InfoSubset;
+use sudachi::prelude::*;
+use sudachi::plugin::PluginContainers;
 
 pub fn dictionary_bytes_from_path<P: AsRef<Path>>(dictionary_path: P) -> SudachiResult<Vec<u8>> {
     let dictionary_path = dictionary_path.as_ref();
@@ -177,7 +180,7 @@ impl<'a> TestTokenizerBuilder<'a> {
 
         let config = match self.config {
             None => TEST_CONFIG.clone(),
-            Some(data) => ConfigBuilder::from_bytes(data).unwrap().build(),
+            Some(data) => ConfigBuilder::from_bytes(data).unwrap().build(|cfg, grammar| Ok(Box::new(PluginContainers::load(cfg, grammar)?))),
         };
 
         let dic = JapaneseDictionary::from_cfg_storage(&config, data).unwrap();

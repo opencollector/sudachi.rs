@@ -249,16 +249,26 @@ impl<D: DictionaryAccess> StatefulTokenizer<D> {
 
 // This structure is purely for Rust.
 // Otherwise splitting code into functions fails to compile with double borrow errors
-struct LatticeBuilder<'a> {
+struct LatticeBuilder<
+    'a,
+    'b,
+    I: IntoIterator<Item = &'b Box<dyn OovProviderPlugin + Send + Sync>> + Clone,
+> where
+    'a: 'b,
+{
     node_buffer: &'a mut Vec<Node>,
     lattice: &'a mut Lattice,
     matrix: &'a ConnectionMatrix<'a>,
     input: &'a InputBuffer,
     lexicon: &'a LexiconSet<'a>,
-    oov_providers: &'a [Box<dyn OovProviderPlugin + Sync + Send>],
+    oov_providers: I,
 }
 
-impl<'a> LatticeBuilder<'a> {
+impl<'a, 'b, I: IntoIterator<Item = &'b Box<dyn OovProviderPlugin + Send + Sync>> + Clone>
+    LatticeBuilder<'a, 'b, I>
+where
+    'a: 'b,
+{
     #[inline]
     fn build_lattice(&mut self) -> SudachiResult<()> {
         self.lattice.reset(self.input.current_chars().len());
@@ -297,13 +307,13 @@ impl<'a> LatticeBuilder<'a> {
                 .cat_at_char(ch_off)
                 .intersects(CategoryType::NOOOVBOW | CategoryType::NOOOVBOW2)
             {
-                for provider in self.oov_providers {
+                for provider in self.oov_providers.clone() {
                     created = self.provide_oovs(ch_off, created, provider.as_ref())?;
                 }
             }
 
             if created.is_empty() {
-                let provider = self.oov_providers.last().unwrap();
+                let provider = self.oov_providers.clone().into_iter().last().unwrap();
                 created = self.provide_oovs(ch_off, created, provider.as_ref())?;
             }
 
