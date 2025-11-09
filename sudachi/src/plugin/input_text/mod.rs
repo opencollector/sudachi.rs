@@ -26,7 +26,7 @@ use crate::input_text::{InputBuffer, InputEditor};
 use crate::plugin::input_text::default_input_text::DefaultInputTextPlugin;
 use crate::plugin::input_text::ignore_yomigana::IgnoreYomiganaPlugin;
 use crate::plugin::input_text::prolonged_sound_mark::ProlongedSoundMarkPlugin;
-use crate::plugin::loader::PluginCategory;
+use crate::plugin::registry::PluginCategory;
 use crate::prelude::*;
 
 /// Trait of plugin to modify the input text before tokenization
