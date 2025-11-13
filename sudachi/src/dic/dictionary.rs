@@ -49,13 +49,13 @@ pub struct JapaneseDictionary {
     _lexicon: LexiconSet<'static>,
 }
 
-fn map_file(path: &Path) -> SudachiResult<Storage> {
+pub fn map_file(path: &Path) -> SudachiResult<Storage> {
     let file = File::open(path)?;
     let mapping = unsafe { Mmap::map(&file) }?;
     Ok(Storage::File(mapping))
 }
 
-fn load_system_dic(cfg: &Config) -> SudachiResult<Storage> {
+pub fn load_system_dic(cfg: &Config) -> SudachiResult<Storage> {
     let p = cfg.resolved_system_dict()?;
     map_file(&p).map_err(|e| e.with_context(p.as_os_str().to_string_lossy()))
 }
